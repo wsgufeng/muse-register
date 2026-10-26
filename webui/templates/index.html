@@ -278,6 +278,7 @@
 
       <div id="fp-health" class="health-grid">
         <div class="health-item" id="fp-health-roxy">检测中...</div>
+        <div class="health-item" id="fp-health-playwright">检测中...</div>
       </div>
       <div style="margin-top: 8px; display: flex; gap: 8px;">
         <button class="secondary" id="btn-fp-health">🔄 重新检测</button>
@@ -288,6 +289,7 @@
       <div class="driver-switch">
         <button data-driver="roxy">RoxyBrowser</button>
         <button data-driver="local">本地浏览器</button>
+        <button data-driver="playwright">Playwright（无头）</button>
       </div>
       <div id="fp-driver-desc" class="driver-desc"></div>
     </div>
@@ -502,6 +504,7 @@ const state = { driver: 'roxy', config: {} };
 const DRIVER_DESCS = {
   roxy: '🎭 RoxyBrowser 本地指纹浏览器 (HTTP API http://127.0.0.1:50100)。需先启动 Roxy 客户端并获取 API Token。推荐用于需要银行卡 Stripe/3DS 的场景。',
   local: '🌐 本地浏览器：使用本机 Chrome 直连注册，不使用代理池和指纹浏览器。',
+  playwright: '🎭 Playwright 无头 Chromium（服务器默认）：无需桌面客户端、无需 Roxy，适合云服务器。',
 };
 
 // ======= Tab 切换 =======
@@ -561,9 +564,9 @@ document.querySelectorAll('.driver-switch button').forEach(btn => {
 });
 
 function updateDriverInfo() {
-  const name = ['roxy', 'local'].includes(state.driver) ? state.driver : 'roxy';
+  const name = ['roxy', 'local', 'playwright'].includes(state.driver) ? state.driver : 'roxy';
   state.driver = name;
-  const pretty = { roxy: 'RoxyBrowser', local: '本地浏览器' }[name] || 'RoxyBrowser';
+  const pretty = { roxy: 'RoxyBrowser', local: '本地浏览器', playwright: 'Playwright' }[name] || 'RoxyBrowser';
   document.getElementById('driver-info').textContent = pretty;
   document.getElementById('fp-driver-desc').textContent = DRIVER_DESCS[name] || '';
   document.querySelectorAll('.driver-switch button').forEach(b => b.classList.toggle('active', b.dataset.driver === name));
@@ -581,6 +584,13 @@ async function loadFingerprintHealth() {
     } else {
       roxy.innerHTML = `<div class="name">🎭 RoxyBrowser</div><div class="badge badge-unreachable">不可用</div> <div class="status">${h.roxy.error || ''}</div>`;
     }
+    const pw = document.getElementById('fp-health-playwright');
+    const pwHealth = h.playwright || {};
+    if (pwHealth.available) {
+      pw.innerHTML = `<div class="name">🎭 Playwright</div><div class="badge badge-reachable">可用</div> <div class="status">无头 Chromium 已安装</div>`;
+    } else {
+      pw.innerHTML = `<div class="name">🎭 Playwright</div><div class="badge badge-unreachable">不可用</div> <div class="status">${pwHealth.error || ''}</div>`;
+    }
     updateDriverInfo();
   } catch (e) {
     document.getElementById('fp-health-roxy').textContent = '检测失败: ' + e;
@@ -591,7 +601,7 @@ async function loadFingerprintHealth() {
 async function loadConfig() {
   const c = await api('/api/config');
   state.config = c;
-  state.driver = ['roxy', 'local'].includes(c.registration_driver) ? c.registration_driver : 'roxy';
+  state.driver = ['roxy', 'local', 'playwright'].includes(c.registration_driver) ? c.registration_driver : 'roxy';
   updateDriverInfo();
   // Roxy
   document.getElementById('roxy-api-base').value = c.roxy_api_base || '';
