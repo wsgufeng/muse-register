@@ -1,0 +1,6 @@
+# 服务器模式（云服务器 / Docker）专用依赖。
+# 本地 Windows 安装不需要这些；部署时执行：
+#   pip install -r requirements.txt -r requirements-server.txt
+#   python -m playwright install chromium --with-deps
+waitress>=3.0.0
+playwright>=1.40.0

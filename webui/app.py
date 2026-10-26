@@ -17,6 +17,8 @@ from config import muse as muse_cfg
 from config import email as email_cfg
 from config import roxybrowser as roxy_cfg
 from config import cloakbrowser as cloak_cfg
+from config import playwright as playwright_cfg
+from webui import server_auth
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +36,11 @@ def _hot_update_attrs(mapping: dict, data: dict) -> None:
 
 
 def _update_env_file(updates: dict[str, str]) -> None:
-    """把配置项写入 .env (空值=删除该键)。"""
-    import pathlib
-    env_path = pathlib.Path(__file__).resolve().parent.parent / ".env"
+    """把配置项写入 .env (空值=删除该键)。
+
+    服务器模式写进数据卷（MUSE_DATA_DIR/.env），本地模式写仓库根目录。
+    """
+    env_path = server_auth.env_file_path()
     lines = []
     existing = {}
     if env_path.exists():
@@ -59,6 +63,11 @@ def _update_env_file(updates: dict[str, str]) -> None:
 
 def create_app() -> Flask:
     app = Flask(__name__)
+
+    # 服务器模式（MUSE_SERVER_MODE=1）：除健康检查与登录页外全部接口要登录。
+    # 本地模式不启用，行为与原来一致。配置缺失时这里直接报错，拒绝带病启动。
+    if server_auth.is_server_mode():
+        server_auth.register_server_auth(app)
 
     # ==================== 首页 ====================
 
@@ -101,12 +110,19 @@ def create_app() -> Flask:
             "cloak_use_proxy": cloak_cfg.CLOAK_USE_PROXY,
             "cloak_license_key": cloak_cfg.CLOAK_LICENSE_KEY,
             "cloak_fingerprint_seed": cloak_cfg.CLOAK_FINGERPRINT_SEED,
+            # Playwright（服务器模式默认驱动）
+            "playwright_headless": playwright_cfg.PLAYWRIGHT_HEADLESS,
+            "playwright_use_proxy": playwright_cfg.PLAYWRIGHT_USE_PROXY,
+            "playwright_geoip": playwright_cfg.PLAYWRIGHT_GEOIP,
+            "playwright_locale": playwright_cfg.PLAYWRIGHT_LOCALE,
+            "playwright_timezone": playwright_cfg.PLAYWRIGHT_TIMEZONE,
+            "server_mode": server_auth.is_server_mode(),
         })
 
     @app.post("/api/config")
     def api_set_config():
         data = request.get_json(force=True, silent=True) or {}
-        env_path = __import__("pathlib").Path(__file__).resolve().parent.parent / ".env"
+        env_path = server_auth.env_file_path()
         lines = []
         existing = {}
         if env_path.exists():
@@ -126,6 +142,9 @@ def create_app() -> Flask:
             "ROXY_CREATE_USE_PROXY_POOL",
             "CLOAK_HEADLESS", "CLOAK_HUMANIZE", "CLOAK_GEOIP",
             "CLOAK_USE_PROXY", "CLOAK_LICENSE_KEY", "CLOAK_FINGERPRINT_SEED",
+            "PLAYWRIGHT_HEADLESS", "PLAYWRIGHT_USE_PROXY", "PLAYWRIGHT_GEOIP",
+            "PLAYWRIGHT_LOCALE", "PLAYWRIGHT_TIMEZONE",
+            "PLAYWRIGHT_EXECUTABLE_PATH", "PLAYWRIGHT_USER_DATA_DIR",
         ]
 
         for key in env_keys:
@@ -156,6 +175,11 @@ def create_app() -> Flask:
             "cloak_headless": cloak_cfg, "cloak_humanize": cloak_cfg,
             "cloak_geoip": cloak_cfg, "cloak_use_proxy": cloak_cfg,
             "cloak_license_key": cloak_cfg, "cloak_fingerprint_seed": cloak_cfg,
+            "playwright_headless": playwright_cfg, "playwright_use_proxy": playwright_cfg,
+            "playwright_geoip": playwright_cfg, "playwright_locale": playwright_cfg,
+            "playwright_timezone": playwright_cfg,
+            "playwright_executable_path": playwright_cfg,
+            "playwright_user_data_dir": playwright_cfg,
         }, data)
 
         auto_workspace = bool(data.get("roxy_auto_workspace"))
@@ -219,6 +243,14 @@ def create_app() -> Flask:
             out["cloak"] = {"available": False, "error": "未安装 cloakbrowser (pip install cloakbrowser)"}
         except Exception as e:
             out["cloak"] = {"available": True, "note": str(e)[:100]}
+
+        try:
+            import playwright  # noqa: F401
+            out["playwright"] = {"available": True}
+        except ImportError:
+            out["playwright"] = {"available": False, "error": "未安装 playwright (pip install -r requirements-server.txt)"}
+        except Exception as e:
+            out["playwright"] = {"available": True, "note": str(e)[:100]}
 
         out["driver"] = roxy_cfg.REGISTRATION_DRIVER
         return jsonify(out)

@@ -14,8 +14,9 @@ from config.env_loader import env_str, apply_env_overrides
 #   "protocol"     = 原有 curl_cffi 纯协议注册（容易封号，不建议）
 #   "roxy"         = 调用 RoxyBrowser 指纹浏览器 + Selenium 自动化注册
 #   "cloak"        = 调用 CloakBrowser + Playwright/Selenium 适配层注册
-#   "browser_use"  = Browser Use Cloud stealth Chromium + Playwright
-#   "skyvern"      = Skyvern Browser Sessions + Playwright
+#   "playwright"   = 系统 Playwright 无头 Chromium（服务器模式默认，无需桌面客户端）
+#   "browser_use"  = Browser Use Cloud stealth Chromium + Playwright（尚未集成）
+#   "skyvern"      = Skyvern Browser Sessions + Playwright（尚未集成）
 REGISTRATION_DRIVER: str = "roxy"
 
 # RoxyBrowser 本地 API

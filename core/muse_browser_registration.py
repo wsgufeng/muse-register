@@ -1591,3 +1591,53 @@ def run_cloak_registration(
                 driver.quit()
             except Exception as e:
                 logger.warning(f"[Cloak→Muse] 关闭 driver 失败: {e}")
+
+
+def run_playwright_registration(
+    email: str | None = None,
+    birthday: str | None = None,
+    proxy: str | None = None,
+    otp_code: str | None = None,
+    on_email_acquired: Callable[[str], None] | None = None,
+) -> dict:
+    """
+    Playwright 无头 Chromium 执行 Muse 注册（服务器模式默认驱动）。
+    接口与 run_cloak_registration 对齐；页面流程共用 _run_muse_page_flow。
+    """
+    from core.playwright_driver import build_playwright_driver
+
+    driver = None
+    try:
+        driver, opened = build_playwright_driver(proxy=proxy)
+        logger.info(f"[Playwright→Muse] 启动完成: profile={opened.profile_id}")
+
+        result = _run_muse_page_flow(
+            driver=driver,
+            email=email,
+            otp_code=otp_code,
+            proxy_url=proxy or "",
+        )
+        try:
+            from config import muse as muse_cfg
+            invite_code = str(getattr(muse_cfg, "INVITE_CODE", "") or "").strip()
+            if result.get("ok") and invite_code:
+                invite_result = _redeem_invite_with_fallback(
+                    driver, invite_code, proxy_url=proxy or "",
+                    access_token=str(result.get("access_token") or ""),
+                )
+                result["invite_code"] = invite_code
+                result["invite_result"] = invite_result
+        except Exception as exc:
+            logger.warning("[Invite] Playwright 浏览器兑换邀请码失败: %s", exc)
+        result.update({"driver": "playwright", "profile_id": opened.profile_id})
+        return result
+
+    except Exception as exc:
+        logger.exception(f"[Playwright→Muse] 注册失败: {type(exc).__name__}: {exc}")
+        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:500]}", "driver": "playwright"}
+    finally:
+        if driver is not None:
+            try:
+                driver.quit()
+            except Exception as e:
+                logger.warning(f"[Playwright→Muse] 关闭 driver 失败: {e}")

@@ -284,6 +284,8 @@ def _run_one_job(job_id: int) -> None:
                 result = _run_job_roxy(job_id)
             elif driver_mode in ("cloak", "cloakbrowser"):
                 result = _run_job_cloak(job_id)
+            elif driver_mode in ("playwright", "pw", "headless"):
+                result = _run_job_playwright(job_id)
             elif driver_mode in ("browser_use", "browseruse", "bu"):
                 result = _run_job_browser_use(job_id)
             else:
@@ -295,7 +297,7 @@ def _run_one_job(job_id: int) -> None:
             email_consumed = bool(result.get("email_consumed"))
             if result.get("ok"):
                 own_invite_code = str(result.get("own_invite_code") or "").strip()
-                if not own_invite_code and driver_mode in ("local", "local_browser", "chrome", "default", "roxy", "roxybrowser", "fingerprint", "browser", "cloak", "cloakbrowser"):
+                if not own_invite_code and driver_mode in ("local", "local_browser", "chrome", "default", "roxy", "roxybrowser", "fingerprint", "browser", "cloak", "cloakbrowser", "playwright", "pw", "headless"):
                     own_invite_code = _fetch_browser_account_invite_code(result)
 
                 payload = dict(result.get("payload") or {})
@@ -486,6 +488,22 @@ def _run_job_cloak(job_id: int) -> dict:
         result["email"] = acquire_email_from_source(email_source)
 
     result.setdefault("driver", "cloak")
+    return result
+
+
+def _run_job_playwright(job_id: int) -> dict:
+    """Playwright 无头 Chromium 注册（服务器模式默认驱动）。"""
+    from core import muse_browser_registration as mbr
+
+    current = db.get_job(job_id) or {}
+    email_source = current.get("email_source") or "outlook"
+
+    result = mbr.run_playwright_registration()
+    if not result.get("email"):
+        from core.email_provider import acquire_email_from_source
+        result["email"] = acquire_email_from_source(email_source)
+
+    result.setdefault("driver", "playwright")
     return result
 
 

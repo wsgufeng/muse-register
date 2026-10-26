@@ -1,0 +1,14 @@
+# 不进镜像的东西：本地凭证、数据库、运行日志、Git 历史。
+.env
+.env.server
+*.sqlite3
+*.db
+data/
+_logs/
+logs/
+cache/
+__pycache__/
+*.py[cod]
+.git/
+.idea/
+.vscode/

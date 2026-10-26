@@ -9,11 +9,20 @@ from pathlib import Path
 
 
 def load_env(override: bool = False) -> None:
-    """加载项目根目录的 .env 文件。"""
+    """加载项目根目录的 .env 文件。
+
+    服务器模式（MUSE_DATA_DIR 已设置）还会再加载数据目录下的 .env，
+    且数据目录优先——这样 Docker 卷里的配置在镜像重建后也不会丢。
+    """
     from dotenv import load_dotenv
     env_path = Path(__file__).parent.parent / ".env"
     if env_path.exists():
         load_dotenv(str(env_path), override=override)
+    data_dir = os.environ.get("MUSE_DATA_DIR", "").strip()
+    if data_dir:
+        data_env = Path(data_dir) / ".env"
+        if data_env.exists():
+            load_dotenv(str(data_env), override=True)
 
 
 def env_str(key: str, default: str = "") -> str:

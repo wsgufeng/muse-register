@@ -23,8 +23,17 @@ from pathlib import Path
 from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_DATA_DIR = _PROJECT_ROOT / "data"
-_SQLITE_PATH = _PROJECT_ROOT / "muse.sqlite3"
+# 服务器模式：MUSE_DATA_DIR 接管全部状态（数据库 + data/），便于挂卷持久化；
+# 未设置时保持原样（数据库在仓库根目录，data/ 在仓库内）。
+import os as _os
+
+_data_override = _os.environ.get("MUSE_DATA_DIR", "").strip()
+if _data_override:
+    _DATA_DIR = Path(_data_override)
+    _SQLITE_PATH = _DATA_DIR / "muse.sqlite3"
+else:
+    _DATA_DIR = _PROJECT_ROOT / "data"
+    _SQLITE_PATH = _PROJECT_ROOT / "muse.sqlite3"
 _SQLITE_LOCK = threading.RLock()
 _SQLITE_READY = False
 
