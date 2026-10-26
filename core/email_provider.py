@@ -8,6 +8,7 @@ EMAIL_SOURCE 支持单个或多个来源：
     "cloudflare_domain"   # 自有域名 + QQ IMAP
     "generic_api"
     "imap"
+    "plain"               # 纯邮箱地址（一行一个导入，无取码凭证，验证码手动输入）
     "outlook,generic_api,imap"   # 按顺序兜底
     ["outlook", "generic_api", "imap"]  # 也兼容列表写法
 """
@@ -16,7 +17,7 @@ from typing import Iterable
 
 logger = logging.getLogger(__name__)
 
-_VALID_SOURCES = ("outlook", "generic_api", "imap", "omnimail", "cloudflare_domain")
+_VALID_SOURCES = ("outlook", "generic_api", "imap", "omnimail", "cloudflare_domain", "plain")
 
 
 def parse_email_sources(value=None) -> list[str]:
@@ -60,6 +61,12 @@ def _pick_from_source(source: str) -> str:
     if source == "imap":
         from core.imap_mail_client import pick_account
         return pick_account().email
+    if source == "plain":
+        from core import db
+        row = db.claim_next_plain()
+        if not row:
+            raise RuntimeError("纯邮箱池没有 available 状态的邮箱 (请先在邮箱池导入，一行一个)")
+        return str(row.get("email") or "").strip()
     from core.outlook_client import pick_account
     return pick_account().email
 
@@ -121,6 +128,8 @@ def resolve_email_source(email: str) -> str:
         return registered_source
 
     from core import db
+    if db.get_plain_by_email(email):
+        return "plain"
     if db.get_imap_email_by_email(email):
         return "imap"
     if db.get_generic_api_email_by_email(email):
@@ -220,6 +229,18 @@ def wait_for_otp(
         or _registered_email_source(email)
         or resolve_email_source(email)
     )
+    if source == "plain":
+        # 纯邮箱没有可自动拉取的邮箱服务，验证码一律手动输入（WebUI 任务列表）。
+        from core.manual_otp import wait_for_manual_otp
+        from config import email as _email_cfg
+        timeout = int(max_wait if max_wait is not None else (getattr(_email_cfg, "OTP_MAX_WAIT", 180) or 180))
+        job_id = None
+        try:
+            from core import registration_service as svc
+            job_id = getattr(svc._THREAD_CTX, "job_id", None)
+        except Exception:
+            job_id = None
+        return wait_for_manual_otp(email, timeout=timeout, job_id=job_id, stop_check=stop_check)
     if source == "omnimail":
         from core.omnimail_client import fetch_latest_otp
         return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
@@ -247,6 +268,8 @@ def email_material_line(email: str, source: str | None = None) -> str:
         row = db.get_generic_api_email_by_email(email)
     elif source == "imap":
         row = db.get_imap_email_by_email(email)
+    elif source == "plain":
+        row = db.get_plain_by_email(email)
     if row:
         return str(row.get("copy_line") or email)
     return str(email or "")
@@ -255,6 +278,10 @@ def email_material_line(email: str, source: str | None = None) -> str:
 def release_email(email: str, status: str = "available", note: str | None = None) -> str:
     """按邮箱实际来源回收状态，返回来源名。"""
     source = resolve_email_source(email)
+    if source == "plain":
+        from core import db
+        db.release_plain(email, status=status, note=note)
+        return source
     if source == "omnimail":
         from core import db
         db.release_omnimail(email, status=status, note=note)
@@ -290,6 +317,8 @@ def release_email_if_unconsumed(email: str, note: str | None = None) -> bool:
         changed = db.release_unconsumed_generic_api_email(email, note=note)
     elif source == "imap":
         changed = db.release_unconsumed_imap_email(email, note=note)
+    elif source == "plain":
+        changed = db.release_unconsumed_plain(email, note=note)
     elif source == "cloudflare_domain":
         changed = db.release_unconsumed_domain_email(email, note=note)
     else:

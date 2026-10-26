@@ -323,8 +323,43 @@ def create_app() -> Flask:
         """
         data = request.get_json(force=True, silent=True) or {}
         source = str(data.get("source") or "outlook").strip().lower()
-        if source not in ("outlook", "generic_api", "imap", "omnimail"):
-            return jsonify({"ok": False, "error": f"未知 source={source}，可选 outlook / generic_api / imap / omnimail"}), 400
+        if source not in ("outlook", "generic_api", "imap", "omnimail", "plain"):
+            return jsonify({"ok": False, "error": f"未知 source={source}，可选 outlook / generic_api / imap / omnimail / plain"}), 400
+
+        # ---- 纯邮箱特殊：一行一个邮箱地址（可容忍 ---- 后缀，只取地址本身） ----
+        if source == "plain":
+            records = data.get("records")
+            if records is None:
+                text = str(data.get("text") or "").strip()
+                file_path = str(data.get("file_path") or "").strip()
+                if file_path:
+                    try:
+                        from pathlib import Path
+                        p = Path(file_path)
+                        if not p.is_absolute():
+                            p = Path(__file__).resolve().parent.parent / file_path
+                        text = p.read_text(encoding="utf-8")
+                    except Exception as exc:
+                        return jsonify({"ok": False, "error": f"读取文件失败: {exc}"}), 400
+                if not text:
+                    return jsonify({"ok": False, "error": "请先粘贴邮箱地址，一行一个"}), 400
+                records = []
+                for raw in text.splitlines():
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    for sep in ("----", "===="):
+                        if sep in line:
+                            line = line.split(sep, 1)[0].strip()
+                            break
+                    records.append({"email": line})
+            if not records:
+                return jsonify({"ok": False, "error": "未解析到有效行。格式：一行一个邮箱地址"}), 400
+            inserted, skipped = db.import_plain_emails(records)
+            return jsonify({
+                "ok": True, "source": "plain",
+                "inserted": inserted, "skipped": skipped, "parsed": len(records),
+            })
 
         # ---- OmniMail 特殊: 从 API 拉全量 mailbox ----
         if source == "omnimail":
@@ -535,6 +570,25 @@ def create_app() -> Flask:
     @app.post("/api/jobs/<int:job_id>/stop")
     def api_stop_job(job_id):
         return jsonify(svc.request_stop_job(job_id))
+
+    @app.post("/api/jobs/<int:job_id>/otp")
+    def api_submit_job_otp(job_id):
+        """纯邮箱注册：用户手动提交验证码（任务等码时在任务列表输入）。"""
+        data = request.get_json(force=True, silent=True) or {}
+        job = db.get_job(job_id)
+        if not job:
+            return jsonify({"ok": False, "error": "任务不存在"}), 404
+        email = str(job.get("email") or "").strip()
+        if not email:
+            return jsonify({"ok": False, "error": "该任务尚未领取邮箱"}), 400
+        from core.manual_otp import submit_manual_otp
+        try:
+            result = submit_manual_otp(email, str(data.get("code") or ""), job_id=job_id)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        if not result.get("ok"):
+            return jsonify(result), 400
+        return jsonify({"ok": True, "email": email})
 
     @app.delete("/api/jobs/<int:job_id>")
     def api_delete_job(job_id):

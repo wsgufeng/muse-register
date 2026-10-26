@@ -16,6 +16,7 @@ email_pool 表的 payload JSON 字段承载不同来源的专属素材:
     imap:        {"imap_server": ..., "imap_port": 993, "imap_ssl": 1, "imap_username": ..., "imap_password": ..., "imap_mailbox": "INBOX"}
 """
 import json
+import re
 import sqlite3
 import threading
 from datetime import datetime
@@ -560,6 +561,67 @@ def import_imap_emails(records: list[dict]) -> tuple[int, int]:
                 """INSERT INTO email_pool
                    (email, source, status, created_at, updated_at, payload)
                    VALUES (?, 'imap', 'available', ?, ?, ?)""",
+                (email, now, now, json.dumps(payload, ensure_ascii=False)),
+            )
+            added += 1
+        conn.commit()
+        return added, skipped
+    finally:
+        conn.close()
+
+
+# ---------- 纯邮箱（一行一个，无取码凭证，验证码手动输入） ----------
+
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+
+def claim_next_plain() -> dict | None:
+    return _claim_next_email("plain")
+
+
+def get_plain_by_email(email: str) -> dict | None:
+    return _get_email_by_source("plain", email)
+
+
+def release_plain(email: str, status: str = "available", note: str | None = None) -> None:
+    _release_email(email, status=status, source="plain", note=note)
+
+
+def release_unconsumed_plain(email: str, note: str | None = None) -> bool:
+    return _release_unconsumed_email(email, source="plain", note=note)
+
+
+def plain_pool_summary() -> dict:
+    return _pool_summary("plain")
+
+
+def import_plain_emails(records: list[dict]) -> tuple[int, int]:
+    """批量导入纯邮箱地址（一行一个）。非法格式跳过，已存在则重置为可用。"""
+    now = _now()
+    conn = _sqlite_conn()
+    added, skipped = 0, 0
+    try:
+        for rec in records:
+            email = str(rec.get("email") or "").strip().lower()
+            if not email or not _EMAIL_RE.match(email):
+                skipped += 1
+                continue
+            existing = conn.execute(
+                "SELECT id FROM email_pool WHERE source='plain' AND email=? COLLATE NOCASE AND archived=0",
+                (email,),
+            ).fetchone()
+            payload = {"copy_line": email}
+            if existing:
+                conn.execute(
+                    "UPDATE email_pool SET payload=?, status='available', updated_at=? WHERE id=?",
+                    (json.dumps(payload, ensure_ascii=False), now, existing["id"]),
+                )
+                skipped += 1
+                continue
+            conn.execute(
+                """INSERT INTO email_pool
+                   (email, source, status, created_at, updated_at, payload)
+                   VALUES (?, 'plain', 'available', ?, ?, ?)""",
                 (email, now, now, json.dumps(payload, ensure_ascii=False)),
             )
             added += 1

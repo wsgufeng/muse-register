@@ -18,7 +18,7 @@ from config.env_loader import env_str, apply_env_overrides
 
 # ===== 基础开关 =====
 USE_EMAIL_SERVICE = True
-EMAIL_SOURCE = "outlook"   # 逗号分隔多来源: outlook,generic_api,imap
+EMAIL_SOURCE = "outlook"   # 逗号分隔多来源: outlook,generic_api,imap,plain
 
 
 # ===== IMAP =====

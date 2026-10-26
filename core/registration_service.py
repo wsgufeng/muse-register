@@ -476,33 +476,37 @@ def _run_job_local(job_id: int) -> dict:
 
 
 def _run_job_cloak(job_id: int) -> dict:
-    """CloakBrowser 指纹浏览器注册。"""
+    """CloakBrowser 指纹浏览器注册：先领邮箱 → 页面流程（与 roxy/local 一致）。"""
     from core import muse_browser_registration as mbr
+    from core.email_provider import acquire_email, acquire_email_from_source
 
     current = db.get_job(job_id) or {}
-    email_source = current.get("email_source") or "outlook"
+    email_source = current.get("email_source") or ""
 
-    result = mbr.run_cloak_registration()
-    if not result.get("email"):
-        from core.email_provider import acquire_email_from_source
-        result["email"] = acquire_email_from_source(email_source)
+    email = acquire_email_from_source(email_source) if email_source else acquire_email()
+    _record_job_email(job_id, email)
+    logging.getLogger(__name__).info(f"[Job {job_id}] [Cloak] 领取邮箱: {email}")
 
+    result = mbr.run_cloak_registration(email=email)
+    result.setdefault("email", email)
     result.setdefault("driver", "cloak")
     return result
 
 
 def _run_job_playwright(job_id: int) -> dict:
-    """Playwright 无头 Chromium 注册（服务器模式默认驱动）。"""
+    """Playwright 无头 Chromium 注册：先领邮箱 → 页面流程（与 roxy/local 一致）。"""
     from core import muse_browser_registration as mbr
+    from core.email_provider import acquire_email, acquire_email_from_source
 
     current = db.get_job(job_id) or {}
-    email_source = current.get("email_source") or "outlook"
+    email_source = current.get("email_source") or ""
 
-    result = mbr.run_playwright_registration()
-    if not result.get("email"):
-        from core.email_provider import acquire_email_from_source
-        result["email"] = acquire_email_from_source(email_source)
+    email = acquire_email_from_source(email_source) if email_source else acquire_email()
+    _record_job_email(job_id, email)
+    logging.getLogger(__name__).info(f"[Job {job_id}] [Playwright] 领取邮箱: {email}")
 
+    result = mbr.run_playwright_registration(email=email)
+    result.setdefault("email", email)
     result.setdefault("driver", "playwright")
     return result
 

@@ -248,6 +248,7 @@
             <option value="outlook" selected>Outlook (需 Mailnest API)</option>
             <option value="generic_api">Generic API 取码</option>
             <option value="imap">IMAP 邮箱</option>
+            <option value="plain">纯邮箱（一行一个，验证码手动输入）</option>
           </select>
         </div>
         <div class="form-group">
@@ -369,6 +370,7 @@
         <button class="source-btn active" data-source="outlook">🅾️ Outlook</button>
         <button class="source-btn" data-source="generic_api">🔌 Generic API</button>
         <button class="source-btn" data-source="imap">📥 IMAP</button>
+        <button class="source-btn" data-source="plain">✉️ 纯邮箱</button>
         <span id="import-source-hint" class="source-hint" style="margin-left:auto;color:#8ab4f8;">当前: Outlook (外购账号池, mail.chatai.codes 远端取信)</span>
       </div>
 
@@ -395,6 +397,11 @@
           </div>
         </div>
         <textarea id="import-textarea" rows="6" placeholder="123456@qq.com----your_16digit_auth_code"></textarea>
+      </div>
+
+      <div id="import-plain" class="import-pane" style="display:none;">
+        <div class="hint">一行一个邮箱地址，无需密码与取码配置；注册时验证码需在任务列表手动输入（# 注释跳过，重复与非法格式自动跳过）</div>
+        <textarea id="import-textarea" rows="6" placeholder="user1@gmail.com&#10;user2@outlook.com&#10;user3@qq.com"></textarea>
       </div>
 
       <div class="import-footer">
@@ -757,6 +764,9 @@ async function deleteCard(id) {
 const selectedJobIds = new Set();
 
 async function loadJobs() {
+  // 正在任务行里输验证码时不刷新表格，避免输入框被重绘吃掉
+  const ae = document.activeElement;
+  if (ae && ae.classList && ae.classList.contains('otp-input')) return;
   const r = await api('/api/jobs?limit=100');
   const tb = document.querySelector('#jobs-table tbody');
   if (!r.items?.length) { tb.innerHTML = '<tr><td colspan="10" class="empty">暂无任务</td></tr>'; return; }
@@ -764,8 +774,11 @@ async function loadJobs() {
   [...selectedJobIds].forEach(id => { if (!visibleIds.includes(id)) selectedJobIds.delete(id); });
   tb.innerHTML = r.items.map(j => {
     const badge = j.status==='success'?'success':j.status==='failed'?'failed':j.status==='running'?'running':j.status==='stopped'||j.status==='stopping'?'stopped':'pending';
+    const otpBox = (j.status==='running' && j.email_source==='plain')
+      ? ` <span class="otp-box"><input class="otp-input" id="otp-${j.id}" placeholder="验证码" maxlength="8" inputmode="numeric" style="width:90px"> <button class="secondary" onclick="submitOtp(${j.id})">提交验证码</button></span>`
+      : '';
     const actions = j.status==='running'
-      ? `<button class="secondary" onclick="showLog(${j.id}, true)">👁 查看日志</button> <button class="secondary" onclick="stopJob(${j.id})">停止</button>`
+      ? `<button class="secondary" onclick="showLog(${j.id}, true)">👁 查看日志</button> <button class="secondary" onclick="stopJob(${j.id})">停止</button>${otpBox}`
       : j.status==='pending'
         ? `<button class="secondary" onclick="stopJob(${j.id})">取消</button>`
         : `<button class="secondary" onclick="showLog(${j.id})">📋 日志</button> <button class="danger" onclick="deleteJob(${j.id})">删除</button>`;
@@ -801,6 +814,14 @@ async function loadJobs() {
 }
 
 async function stopJob(id) { await api(`/api/jobs/${id}/stop`,{method:'POST'}); loadJobs(); }
+async function submitOtp(id) {
+  const input = document.getElementById('otp-' + id);
+  const code = (input?.value || '').trim();
+  if (!code) { alert('请先输入邮箱收到的验证码'); return; }
+  const r = await api(`/api/jobs/${id}/otp`, { method:'POST', json:{ code } });
+  if (r && r.ok) { alert('✅ 验证码已提交'); loadJobs(); }
+  else { alert('❌ ' + ((r && r.error) || '提交失败')); }
+}
 async function deleteJob(id) {
   if (!confirm(`删除任务 #${id} 及其日志？此操作不可恢复。`)) return;
   const r = await api(`/api/jobs/${id}`, { method:'DELETE' });
@@ -866,6 +887,7 @@ const SOURCE_HINTS = {
           outlook:      '当前: Outlook',
   generic_api:  '当前: Generic API (自建/yangyang/mailnest 本地取码接口)',
   imap:         '当前: IMAP (QQ/Gmail/自建服务器)',
+  plain:        '当前: 纯邮箱 (一行一个地址，验证码手动输入)',
 };
 document.querySelectorAll('.source-btn').forEach(btn => {
   btn.addEventListener('click', () => {
