@@ -3,3 +3,5 @@ python-dotenv>=1.0.0
 requests>=2.31.0
 flask>=3.0.0
 pycryptodome>=3.23.0
+# local / roxy / cloak 三个浏览器驱动都要用 Selenium（此前漏声明，部署后 local 任务会报 No module named 'selenium'）
+selenium>=4.20.0

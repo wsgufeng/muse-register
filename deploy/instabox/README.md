@@ -119,3 +119,4 @@ Chromium 约占 400MB，留意别把根盘塞满。
 | 服务 60 秒未就绪 | `instabox exec <机器> -- journalctl -u muse-register -n 100` 看报错；常见是密码/密钥长度不够 |
 | 登录页打不开 | 先确认机器在运行（`instabox ls`），再确认端口已公开（`instabox port publish` 重新执行一次） |
 | 打开页面是登录页但密码不对 | 对照本机 `deploy/instabox/.env.server` 里的密码；改了机器上的配置要重启服务才生效 |
+| 任务报 `ModuleNotFoundError: No module named 'selenium'` | 任务用了 local 驱动（要 Selenium）：配置页把注册驱动改成 `playwright` 再建任务；或进机器执行 `/data/home/muse-register/venv/bin/pip install selenium` 后重跑任务 |
