@@ -1,5 +1,6 @@
 # 本地配置与凭证
 .env
+.env.server
 .card_key
 *.key
 *.pem

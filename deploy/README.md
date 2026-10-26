@@ -29,6 +29,22 @@ docker compose up -d --build
 
 健康检查：`curl http://127.0.0.1:8799/api/health` → `{"ok": true}`（无需登录）。
 
+## InstaBox 免费云主机
+
+没有自己的服务器时，可以部署到 [InstaBox](https://instabox.sh) 的免费机
+（Debian 13、4 核 8G）。完整流程与一键脚本见
+[deploy/instabox/README.md](instabox/README.md)：
+
+```bash
+./deploy/instabox/deploy.sh            # 新建一台机器并部署
+MACHINE=测试 ./deploy/instabox/deploy.sh  # 复用已有的机器（免费版只有 1 台时）
+```
+
+InstaBox 的 `port publish` 自带 HTTPS 终止（网关即反向代理），符合下面
+“反向代理 + HTTPS”的要求。注意免费版机器闲置 30 分钟自动暂停、连续运行
+满 480 分钟（8 小时）也会强制暂停（随后 10 分钟冷却期无法唤醒），
+不适合当 7×24 服务器用；要长期在线请升 Pro。
+
 ## 不用 Docker 时
 
 ```bash

@@ -94,6 +94,7 @@ python web.py --host 0.0.0.0 --port 8801
 专门的服务器模式见 [deploy/README.md](deploy/README.md)，与本地模式并行：
 
 - `docker compose -f deploy/docker-compose.yml up -d --build` 一键拉起；
+- 没有自己的服务器时，可部署到 InstaBox 免费机：`./deploy/instabox/deploy.sh`（详见 [deploy/instabox/README.md](deploy/instabox/README.md)）；
 - 启用登录鉴权（`MUSE_ADMIN_PASSWORD` / `MUSE_SESSION_SECRET` 必填）；
 - 状态全部进数据卷（`MUSE_DATA_DIR`），镜像重建不丢；
 - 注册驱动默认 `playwright`（Playwright 无头 Chromium，无需桌面客户端；无指纹伪装，目标站是否放行需实测）；
